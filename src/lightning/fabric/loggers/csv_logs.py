@@ -148,7 +148,7 @@ class CSVLogger(Logger):
     ) -> None:
         metrics = _add_prefix(metrics, self._prefix, self.LOGGER_JOIN_CHAR)
         if step is None:
-            step = len(self.experiment.metrics)
+            step = self.experiment.num_logged
         self.experiment.log_metrics(metrics, step)
         if (step + 1) % self._flush_logs_every_n_steps == 0:
             self.save()
@@ -202,6 +202,8 @@ class _ExperimentWriter:
     def __init__(self, log_dir: str) -> None:
         self.metrics: list[dict[str, float]] = []
         self.metrics_keys: list[str] = []
+        # `self.metrics` is emptied on every `save()`, so it can't be used to derive the automatic step
+        self.num_logged = 0
 
         self._fs = get_filesystem(log_dir)
         self.log_dir = log_dir
@@ -219,7 +221,8 @@ class _ExperimentWriter:
             return value
 
         if step is None:
-            step = len(self.metrics)
+            step = self.num_logged
+        self.num_logged += 1
 
         metrics = {k: _handle_value(v) for k, v in metrics_dict.items()}
         metrics["step"] = step

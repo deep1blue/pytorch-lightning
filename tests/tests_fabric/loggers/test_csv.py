@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import csv
 import os
 from unittest import mock
 from unittest.mock import MagicMock
@@ -145,6 +146,18 @@ def test_automatic_step_tracking(tmp_path):
     logger.log_metrics(metrics, step=None)
     logger.save.assert_called_once()
     assert logger.experiment.metrics[2]["step"] == 2
+
+
+def test_automatic_step_tracking_across_flushes(tmp_path):
+    """Test that the automatic step keeps increasing after the metrics were flushed to disk."""
+    logger = CSVLogger(tmp_path, flush_logs_every_n_steps=3)
+    for i in range(7):
+        logger.log_metrics({"test": float(i)}, step=None)
+    logger.finalize("success")
+
+    with open(os.path.join(logger.log_dir, _ExperimentWriter.NAME_METRICS_FILE)) as file:
+        steps = [int(row["step"]) for row in csv.DictReader(file)]
+    assert steps == list(range(7))
 
 
 @mock.patch(
