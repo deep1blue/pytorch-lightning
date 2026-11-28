@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Mapping
+
 import pytest
 import torch
 import torch.nn as nn
@@ -151,14 +153,33 @@ def test_materialize_tensors(tmp_path):
         == materialized_sub["view"].untyped_storage().data_ptr()
     )
 
-    # Generator yielding transient _NotYetLoadedTensor instances must not alias via reused id()
+    # Mapping yielding transient _NotYetLoadedTensor instances per key must not alias via reused id()
+    class TransientLazyMapping(Mapping):
+        def __init__(self, items):
+            self._items = dict(items)
+
+        def __getitem__(self, key):
+            val = self._items[key]
+            if isinstance(val, _NotYetLoadedTensor):
+                return _NotYetLoadedTensor(val.metatensor, val.archiveinfo, val.storageinfo, val.rebuild_args)
+            return val
+
+        def __iter__(self):
+            return iter(self._items)
+
+        def __len__(self):
+            return len(self._items)
+
     t0 = torch.tensor([10.0, 20.0])
     t1 = torch.tensor([30.0, 40.0])
     torch.save(t0, tmp_path / "t0.pt")
     torch.save(t1, tmp_path / "t1.pt")
-    materialized_gen = list(_materialize_tensors(_lazy_load(tmp_path / name) for name in ("t0.pt", "t1.pt")))
-    assert torch.equal(materialized_gen[0], t0)
-    assert torch.equal(materialized_gen[1], t1)
+    transient_map = TransientLazyMapping({"t0": _lazy_load(tmp_path / "t0.pt"), "t1": _lazy_load(tmp_path / "t1.pt")})
+    materialized_map = _materialize_tensors(transient_map)
+    assert not isinstance(materialized_map["t0"], _NotYetLoadedTensor)
+    assert not isinstance(materialized_map["t1"], _NotYetLoadedTensor)
+    assert torch.equal(materialized_map["t0"], t0)
+    assert torch.equal(materialized_map["t1"], t1)
 
 
 def test_move_state_into():
