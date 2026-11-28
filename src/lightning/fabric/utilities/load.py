@@ -69,9 +69,9 @@ class _NotYetLoadedTensor:
         if isinstance(ret, _NotYetLoadedTensor):
             old_lt = ret._load_tensor
 
-            def _load_tensor(**kwargs: Any) -> Any:
-                t = old_lt(**kwargs)
-                load_fn = kwargs.get("load_tensor_fn") or (lambda x: x._load_tensor(**kwargs))
+            def _load_tensor(*args: Any, **kwargs: Any) -> Any:
+                t = old_lt(*args, **kwargs)
+                load_fn = kwargs.get("load_tensor_fn") or (lambda x: x._load_tensor(*args, **kwargs))
                 materialized_state = (
                     apply_to_collection(state, dtype=_NotYetLoadedTensor, function=load_fn) if state else state
                 )
@@ -93,8 +93,8 @@ class _NotYetLoadedTensor:
         if isinstance(data, _NotYetLoadedTensor):
             old_lt = data._load_tensor
 
-            def _load_tensor(**kwargs: Any) -> Parameter:
-                t = old_lt(**kwargs)
+            def _load_tensor(*args: Any, **kwargs: Any) -> Parameter:
+                t = old_lt(*args, **kwargs)
                 return torch._utils._rebuild_parameter(t, requires_grad, backward_hooks)
 
             data._load_tensor = _load_tensor  # type: ignore[method-assign]
@@ -232,7 +232,7 @@ def _lazy_load(filename: _PATH) -> Any:
 
 def _materialize_tensors(collection: Any) -> Any:
     loaded_tensors: dict[int, tuple[_NotYetLoadedTensor, Tensor]] = {}
-    storage_cache: dict[tuple[int, Any], "UntypedStorage"] = {}
+    storage_cache: dict[tuple[int, Any], UntypedStorage] = {}
 
     def _load_tensor(t: _NotYetLoadedTensor) -> Tensor:
         tensor_id = id(t)
